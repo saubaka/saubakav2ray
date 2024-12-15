@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloudflare DNS Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+
+        h1 {
+            color: #0056b3;
+        }
+
+        p {
+            font-size: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+        }
+
+        table, th, td {
+            border: 1px solid #ddd;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
+        .form-section {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 5px;
+        }
+
+        .form-section h2 {
+            color: #0056b3;
+        }
+
+        .form-section input, .form-section button {
+            margin: 5px 0;
+            padding: 10px;
+            width: calc(100% - 22px);
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .form-section button {
+            background-color: #0056b3;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .form-section button:hover {
+            background-color: #004494;
+        }
+
+        .action-buttons button {
+            padding: 5px 10px;
+            margin: 2px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .action-buttons .delete {
+            background-color: #e74c3c;
+            color: #fff;
+        }
+
+        .action-buttons .delete:hover {
+            background-color: #c0392b;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .form-section input[type="checkbox"] {
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Cloudflare DNS Manager</h1>
+    <p>Use this tool to view and modify DNS records for your domain.</p>
+
+    <div>
+        <label for="zoneId">Zone ID:</label>
+        <input type="text" id="zoneId" placeholder="Enter your Zone ID">
+        <button onclick="fetchDNSRecords()">Fetch DNS Records</button>
+    </div>
+
+    <table id="dnsRecordsTable" style="display: none;">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th>Content</th>
+                <th>TTL</th>
+                <th>Proxied</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <div class="form-section">
+        <h2>Add/Update DNS Record</h2>
+        <input type="text" id="recordType" placeholder="Type (e.g., A, CNAME)">
+        <input type="text" id="recordName" placeholder="Name (e.g., example.com)">
+        <input type="text" id="recordContent" placeholder="Content (e.g., IP address)">
+        <input type="number" id="recordTTL" placeholder="TTL (seconds)">
+        <label>
+            <input type="checkbox" id="recordProxied"> Proxied
+        </label>
+        <button onclick="addOrUpdateDNSRecord()">Submit</button>
+    </div>
+</div>
+
+<script>
+    const apiToken = "WG84tAHPoGA6GOR9mDnNRUEy58yv7CR4OaqUGIAt"; // Replace with your Cloudflare API token
+
+    async function fetchDNSRecords() {
+        const zoneId = document.getElementById('zoneId').value;
+        if (!zoneId) {
+            alert('Please enter a Zone ID.');
+            return;
+        }
+
+        const response = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${apiToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            renderDNSRecords(data.result);
+        } else {
+            alert('Error fetching DNS records: ' + data.errors[0].message);
+        }
+    }
+
+    function renderDNSRecords(records) {
+        const table = document.getElementById('dnsRecordsTable');
+        const tbody = table.querySelector('tbody');
+        tbody.innerHTML = '';
+
+        records.forEach(record => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${record.type}</td>
+                <td>${record.name}</td>
+                <td>${record.content}</td>
+                <td>${record.ttl}</td>
+                <td>${record.proxied}</td>
+                <td class="action-buttons">
+                    <button class="delete" onclick="deleteDNSRecord('${record.id}')">Delete</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        table.style.display = 'table';
+    }
+
+    async function addOrUpdateDNSRecord() {
+        const zoneId = document.getElementById('zoneId').value;
+        const type = document.getElementById('recordType').value;
+        const name = document.getElementById('recordName').value;
+        const content = document.getElementById('recordContent').value;
+        const ttl = parseInt(document.getElementById('recordTTL').value);
+        const proxied = document.getElementById('recordProxied').checked;
+
+        if (!zoneId || !type || !name || !content || isNaN(ttl)) {
+            alert('Please fill out all fields correctly.');
+            return;
+        }
+
+        const payload = { type, name, content, ttl, proxied };
+
+        const response = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            alert('DNS record added/updated successfully.');
+            fetchDNSRecords();
+        } else {
+            alert('Error adding/updating DNS record: ' + data.errors[0].message);
+        }
+    }
+
+    async function deleteDNSRecord(recordId) {
+        const zoneId = document.getElementById('zoneId').value;
+        if (!zoneId || !recordId) {
+            alert('Missing Zone ID or Record ID.');
+            return;
+        }
+
+        const response = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records/${recordId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${apiToken}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+        if (data.success) {
+            alert('DNS record deleted successfully.');
+            fetchDNSRecords();
+        } else {
+            alert('Error deleting DNS record: ' + data.errors[0].message);
+        }
+    }
+</script>
+
+</body>
+</html>
